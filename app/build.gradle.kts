@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.mesraai.app"
+    namespace = "com.example"
     compileSdk = 36
 
     defaultConfig {
