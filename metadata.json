@@ -1,0 +1,6 @@
+{
+  "name": "MesraAI",
+  "description": "Aplikasi chatbot pasangan virtual Indonesia yang romantis, hangat, perhatian, dengan avatar interaktif, lip-sync, dan Text-to-Speech.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,19 @@
+<resources>
+    <string name="app_name">MesraAI</string>
+    <string name="companion_name">Mesra</string>
+    <string name="companion_status_online">Selalu ada buat kamu</string>
+    <string name="companion_status_typing">Sedang mengetik dengan penuh sayang...</string>
+    <string name="companion_status_speaking">Sedang berbicara...</string>
+    <string name="companion_status_listening">Mendengarkan suaramu...</string>
+    <string name="placeholder_message">Cerita apa hari ini, sayang?</string>
+    <string name="btn_send">Kirim</string>
+    <string name="btn_voice">Suara</string>
+    <string name="btn_clear_chat">Hapus Chat</string>
+    <string name="btn_reset_memory">Reset Memory</string>
+    <string name="btn_settings">Pengaturan &amp; API Key</string>
+    <string name="btn_toggle_tts">Aktif/Nonaktifkan Suara</string>
+    <string name="btn_replay_tts">Putar Ulang Suara</string>
+    <string name="api_key_missing_title">Konfigurasi Gemini API Key</string>
+    <string name="api_key_missing_desc">Masukkan Gemini API Key kamu agar Mesra bisa membalas pesanmu dengan hangat dan romantis.</string>
+    <string name="api_key_configure_btn">Atur API Key Sekarang</string>
+</resources>
