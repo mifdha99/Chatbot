@@ -47,8 +47,9 @@ data class AppSettingsState(
 }
 
 class UserPreferencesRepository(
-    private val context: Context
+    context: Context
 ) {
+    private val context: Context = context.applicationContext
 
     private object Keys {
         val ENCODED_API_KEY = stringPreferencesKey("encoded_gemini_api_key")
@@ -327,6 +328,19 @@ class UserPreferencesRepository(
 
         } catch (_: Exception) {
             ""
+        }
+    }
+
+    companion object {
+        @Volatile
+        private var INSTANCE: UserPreferencesRepository? = null
+
+        fun getInstance(context: Context): UserPreferencesRepository {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: UserPreferencesRepository(context.applicationContext).also {
+                    INSTANCE = it
+                }
+            }
         }
     }
 }

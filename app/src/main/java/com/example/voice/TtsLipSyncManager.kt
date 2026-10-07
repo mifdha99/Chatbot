@@ -22,7 +22,8 @@ import kotlin.math.sin
 
 class TtsLipSyncManager(context: Context) : TextToSpeech.OnInitListener {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val appContext = context.applicationContext
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var tts: TextToSpeech? = null
     private var isTtsReady = false
     private var lipSyncJob: Job? = null
@@ -37,49 +38,55 @@ class TtsLipSyncManager(context: Context) : TextToSpeech.OnInitListener {
     val lastSpokenText: StateFlow<String> = _lastSpokenText.asStateFlow()
 
     init {
-        try {
-            tts = TextToSpeech(context.applicationContext, this)
-        } catch (_: Exception) {
+        runCatching {
+            tts = TextToSpeech(appContext, this)
+        }.onFailure {
             isTtsReady = false
         }
     }
 
     override fun onInit(status: Int) {
-        if (status == TextToSpeech.SUCCESS) {
-            val engine = tts ?: return
-            val idLocale = Locale.forLanguageTag("id-ID")
-            val result = engine.setLanguage(idLocale)
-            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                // Fallback to legacy Indonesian tag "in-ID" or device default
-                val fallbackLocale = Locale("in", "ID")
-                val fallbackResult = engine.setLanguage(fallbackLocale)
-                if (fallbackResult == TextToSpeech.LANG_MISSING_DATA || fallbackResult == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    engine.setLanguage(Locale.getDefault())
+        runCatching {
+            if (status == TextToSpeech.SUCCESS) {
+                val engine = tts ?: return
+                val idLocale = Locale.forLanguageTag("id-ID")
+                val result = runCatching { engine.setLanguage(idLocale) }
+                    .getOrDefault(TextToSpeech.LANG_NOT_SUPPORTED)
+
+                if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    val fallbackLocale = Locale.forLanguageTag("in-ID")
+                    val fallbackResult = runCatching { engine.setLanguage(fallbackLocale) }
+                        .getOrDefault(TextToSpeech.LANG_NOT_SUPPORTED)
+                    if (fallbackResult == TextToSpeech.LANG_MISSING_DATA || fallbackResult == TextToSpeech.LANG_NOT_SUPPORTED) {
+                        runCatching { engine.setLanguage(Locale.getDefault()) }
+                    }
                 }
+
+                runCatching { engine.setPitch(1.08f) }
+                runCatching { engine.setSpeechRate(0.98f) }
+
+                engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {
+                        _isSpeaking.value = true
+                    }
+
+                    override fun onDone(utteranceId: String?) {
+                        stopLipSyncInternal()
+                    }
+
+                    @Deprecated("Deprecated in Java")
+                    override fun onError(utteranceId: String?) {
+                        stopLipSyncInternal()
+                    }
+
+                    override fun onError(utteranceId: String?, errorCode: Int) {
+                        stopLipSyncInternal()
+                    }
+                })
+                isTtsReady = true
             }
-            // Warm, natural female-like pitch and comfortable conversational cadence
-            engine.setPitch(1.08f)
-            engine.setSpeechRate(0.98f)
-
-            engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                override fun onStart(utteranceId: String?) {
-                    _isSpeaking.value = true
-                }
-
-                override fun onDone(utteranceId: String?) {
-                    stopLipSyncInternal()
-                }
-
-                @Deprecated("Deprecated in Java")
-                override fun onError(utteranceId: String?) {
-                    stopLipSyncInternal()
-                }
-
-                override fun onError(utteranceId: String?, errorCode: Int) {
-                    stopLipSyncInternal()
-                }
-            })
-            isTtsReady = true
+        }.onFailure {
+            isTtsReady = false
         }
     }
 
@@ -99,25 +106,22 @@ class TtsLipSyncManager(context: Context) : TextToSpeech.OnInitListener {
 
         stopLipSyncInternal()
         val utteranceId = "mesra_tts_${UUID.randomUUID()}"
-
-        // Estimate realistic duration in ms (~72ms per character in Indonesian, bounded 1.8s..18s)
         val estimatedDurationMs = (cleanSpeechText.length * 72L).coerceIn(1800L, 18000L)
 
         startLipSyncAnimation(cleanSpeechText, estimatedDurationMs)
 
         val engine = tts
         if (isTtsReady && engine != null) {
-            val params = Bundle().apply {
-                putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
-            }
-            val speakResult = engine.speak(
-                cleanSpeechText,
-                TextToSpeech.QUEUE_FLUSH,
-                params,
-                utteranceId
-            )
-            if (speakResult == TextToSpeech.ERROR) {
-                // Keep visual lip-sync running for estimated duration even if emulator lacks audio output
+            runCatching {
+                val params = Bundle().apply {
+                    putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, utteranceId)
+                }
+                engine.speak(
+                    cleanSpeechText,
+                    TextToSpeech.QUEUE_FLUSH,
+                    params,
+                    utteranceId
+                )
             }
         }
     }
@@ -130,9 +134,8 @@ class TtsLipSyncManager(context: Context) : TextToSpeech.OnInitListener {
     }
 
     fun stopSpeaking() {
-        try {
+        runCatching {
             tts?.stop()
-        } catch (_: Exception) {
         }
         stopLipSyncInternal()
     }
@@ -152,7 +155,6 @@ class TtsLipSyncManager(context: Context) : TextToSpeech.OnInitListener {
                     break
                 }
 
-                // Sample character position along the utterance to pause naturally on punctuation
                 val progress = (elapsed.toFloat() / maxDurationMs.toFloat()).coerceIn(0f, 0.99f)
                 val charIndex = (progress * chars.size).toInt().coerceIn(0, (chars.size - 1).coerceAtLeast(0))
                 val currentChar = chars.getOrNull(charIndex) ?: 'a'
@@ -171,8 +173,8 @@ class TtsLipSyncManager(context: Context) : TextToSpeech.OnInitListener {
                         else -> 0.55f
                     }
                     val wave = abs(sin(step * 0.65f))
-                    val SecondaryWave = abs(sin(step * 1.15f + 0.8f)) * 0.35f
-                    val openness = ((wave * 0.7f + SecondaryWave) * vowelWeight).coerceIn(0.12f, 1.0f)
+                    val secondaryWave = abs(sin(step * 1.15f + 0.8f)) * 0.35f
+                    val openness = ((wave * 0.7f + secondaryWave) * vowelWeight).coerceIn(0.12f, 1.0f)
                     _mouthOpenness.value = openness
                     delay(55L)
                 }
@@ -191,26 +193,34 @@ class TtsLipSyncManager(context: Context) : TextToSpeech.OnInitListener {
     }
 
     /**
-     * Strips emojis, markdown symbols, and bracket tags so Android TTS reads smooth Indonesian sentences.
+     * Strips bracket tags, markdown symbols, and emojis using character inspection (100% ICU-safe on all Android versions).
      */
     private fun sanitizeForIndonesianTts(input: String): String {
-        return input
-            .replace(Regex("""\[[^\]]*]"""), "") // remove [SMILE] etc.
-            .replace(Regex("""[*_~`#>]"""), "") // remove markdown symbols
-            .replace(
-                Regex("""[\p{So}\p{Cn}\uFE0F\u200D]+"""),
-                " "
-            ) // remove emojis & symbols
-            .replace(Regex("""\s+"""), " ")
-            .trim()
+        if (input.isBlank()) return ""
+        val withoutTags = input.replace(Regex("\\[[^\\]]*\\]"), " ")
+        val sb = StringBuilder(withoutTags.length)
+        for (ch in withoutTags) {
+            val type = Character.getType(ch)
+            val isEmojiOrSymbol = type == Character.SURROGATE.toInt() ||
+                type == Character.OTHER_SYMBOL.toInt() ||
+                type == Character.NON_SPACING_MARK.toInt() ||
+                ch == '*' || ch == '_' || ch == '~' || ch == '`' || ch == '#' || ch == '>'
+            if (isEmojiOrSymbol) {
+                sb.append(' ')
+            } else {
+                sb.append(ch)
+            }
+        }
+        return sb.toString().replace(Regex("\\s+"), " ").trim()
     }
 
     fun shutdown() {
         stopSpeaking()
-        try {
+        runCatching {
             tts?.shutdown()
-        } catch (_: Exception) {
         }
-        scope.cancel()
+        runCatching {
+            scope.cancel()
+        }
     }
 }

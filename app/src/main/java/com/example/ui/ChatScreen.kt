@@ -141,81 +141,86 @@ fun ChatScreen(
     var showClearChatDialog by remember { mutableStateOf(false) }
     var showVoiceDialog by remember { mutableStateOf(false) }
 
-    // Android SpeechRecognizer state for Indonesian Voice Input
+    // Lazy SpeechRecognizer (NEVER created at app startup; only created on-demand when user taps Voice)
     var isVoiceListening by remember { mutableStateOf(false) }
     var partialSpokenText by remember { mutableStateOf("") }
     var voiceErrorText by remember { mutableStateOf<String?>(null) }
+    var activeSpeechRecognizer by remember { mutableStateOf<SpeechRecognizer?>(null) }
 
-    val speechRecognizer = remember {
-        if (SpeechRecognizer.isRecognitionAvailable(context)) {
-            SpeechRecognizer.createSpeechRecognizer(context)
-        } else {
-            null
+    DisposableEffect(Unit) {
+        onDispose {
+            runCatching {
+                activeSpeechRecognizer?.destroy()
+                activeSpeechRecognizer = null
+            }
         }
     }
 
-    DisposableEffect(speechRecognizer) {
-        val listener = object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) {
-                isVoiceListening = true
-                voiceErrorText = null
-            }
-
-            override fun onBeginningOfSpeech() {
-                isVoiceListening = true
-            }
-
-            override fun onRmsChanged(rmsdB: Float) {}
-            override fun onBufferReceived(buffer: ByteArray?) {}
-
-            override fun onEndOfSpeech() {
-                isVoiceListening = false
-            }
-
-            override fun onError(error: Int) {
-                isVoiceListening = false
-                voiceErrorText = "Suara belum terdengar jelas. Kamu juga bisa pilih kalimat cepat di bawah ya sayang 💕"
-            }
-
-            override fun onResults(results: Bundle?) {
-                isVoiceListening = false
-                val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                val recognized = matches?.firstOrNull()?.trim().orEmpty()
-                if (recognized.isNotEmpty()) {
-                    partialSpokenText = recognized
-                    showVoiceDialog = false
-                    viewModel.sendMessage(recognized)
-                }
-            }
-
-            override fun onPartialResults(partialResults: Bundle?) {
-                val partial = partialResults
-                    ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    ?.firstOrNull()
-                    .orEmpty()
-                if (partial.isNotBlank()) {
-                    partialSpokenText = partial
-                }
-            }
-
-            override fun onEvent(eventType: Int, params: Bundle?) {}
+    fun stopSpeechRecognition() {
+        runCatching {
+            activeSpeechRecognizer?.stopListening()
         }
-        speechRecognizer?.setRecognitionListener(listener)
-
-        onDispose {
-            try {
-                speechRecognizer?.destroy()
-            } catch (_: Exception) {
-            }
-        }
+        isVoiceListening = false
     }
 
     fun startSpeechRecognition() {
-        if (speechRecognizer == null) {
-            voiceErrorText = "Fitur mikrofon tidak tersedia di perangkat/emulator ini. Pilih pesan suara cepat di bawah ya 💕"
-            return
-        }
-        try {
+        runCatching {
+            if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+                voiceErrorText = "Fitur pengenalan suara belum tersedia di HP ini. Kamu bisa pilih pesan suara cepat di bawah ya 💕"
+                isVoiceListening = false
+                return
+            }
+
+            if (activeSpeechRecognizer == null) {
+                val recognizer = SpeechRecognizer.createSpeechRecognizer(context.applicationContext)
+                recognizer.setRecognitionListener(object : RecognitionListener {
+                    override fun onReadyForSpeech(params: Bundle?) {
+                        isVoiceListening = true
+                        voiceErrorText = null
+                    }
+
+                    override fun onBeginningOfSpeech() {
+                        isVoiceListening = true
+                    }
+
+                    override fun onRmsChanged(rmsdB: Float) {}
+                    override fun onBufferReceived(buffer: ByteArray?) {}
+
+                    override fun onEndOfSpeech() {
+                        isVoiceListening = false
+                    }
+
+                    override fun onError(error: Int) {
+                        isVoiceListening = false
+                        voiceErrorText = "Suara belum terdengar jelas. Ketuk mikrofon lagi atau pilih kalimat di bawah ya sayang 💕"
+                    }
+
+                    override fun onResults(results: Bundle?) {
+                        isVoiceListening = false
+                        val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        val recognized = matches?.firstOrNull()?.trim().orEmpty()
+                        if (recognized.isNotEmpty()) {
+                            partialSpokenText = recognized
+                            showVoiceDialog = false
+                            viewModel.sendMessage(recognized)
+                        }
+                    }
+
+                    override fun onPartialResults(partialResults: Bundle?) {
+                        val partial = partialResults
+                            ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                            ?.firstOrNull()
+                            .orEmpty()
+                        if (partial.isNotBlank()) {
+                            partialSpokenText = partial
+                        }
+                    }
+
+                    override fun onEvent(eventType: Int, params: Bundle?) {}
+                })
+                activeSpeechRecognizer = recognizer
+            }
+
             partialSpokenText = ""
             voiceErrorText = null
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -224,20 +229,12 @@ fun ChatScreen(
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
             }
-            speechRecognizer.startListening(intent)
+            activeSpeechRecognizer?.startListening(intent)
             isVoiceListening = true
-        } catch (_: Exception) {
+        }.onFailure {
             isVoiceListening = false
-            voiceErrorText = "Tidak dapat memulai mikrofon. Silakan pilih pesan cepat di bawah ya sayang."
+            voiceErrorText = "Tidak dapat memulai mikrofon. Silakan pilih pesan suara cepat di bawah ya sayang 💕"
         }
-    }
-
-    fun stopSpeechRecognition() {
-        try {
-            speechRecognizer?.stopListening()
-        } catch (_: Exception) {
-        }
-        isVoiceListening = false
     }
 
     val audioPermissionLauncher = rememberLauncherForActivityResult(
@@ -253,11 +250,12 @@ fun ChatScreen(
 
     val listState = rememberLazyListState()
 
-    // Auto-scroll to latest message whenever messages list changes or typing indicator appears
     LaunchedEffect(messages.size, isLoading) {
         val totalItems = messages.size + (if (isLoading) 1 else 0)
         if (totalItems > 0) {
-            listState.animateScrollToItem(totalItems - 1)
+            runCatching {
+                listState.animateScrollToItem(totalItems - 1)
+            }
         }
     }
 
@@ -310,7 +308,7 @@ fun ChatScreen(
                 )
             }
 
-            // 3. Friendly Notification / Error Banner (non-crashing, warm Indonesian message)
+            // 3. Friendly Notification / Error Banner
             AnimatedVisibility(
                 visible = bannerMessage != null,
                 enter = fadeIn(),
@@ -325,7 +323,7 @@ fun ChatScreen(
                 }
             }
 
-            // 4. Chat Messages Area (Auto-scrolling LazyColumn)
+            // 4. Chat Messages Area
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -376,23 +374,28 @@ fun ChatScreen(
                     }
                 },
                 onVoiceButtonClick = {
-                    val hasAudioPermission = ContextCompat.checkSelfPermission(
-                        context,
-                        Manifest.permission.RECORD_AUDIO
-                    ) == PackageManager.PERMISSION_GRANTED
+                    val hasAudioPermission = runCatching {
+                        ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.RECORD_AUDIO
+                        ) == PackageManager.PERMISSION_GRANTED
+                    }.getOrDefault(false)
 
                     if (hasAudioPermission) {
                         showVoiceDialog = true
                         startSpeechRecognition()
                     } else {
-                        audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        runCatching {
+                            audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        }.onFailure {
+                            showVoiceDialog = true
+                        }
                     }
                 }
             )
         }
     }
 
-    // Modals & Dialogs
     if (showSettingsDialog) {
         ApiKeySettingsDialog(
             currentApiKey = settings.customApiKey,
@@ -525,7 +528,6 @@ private fun MesraTopAppBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                // Memory Dialog Button
                 IconButton(
                     onClick = onOpenMemory,
                     modifier = Modifier.testTag("memory_button")
@@ -537,7 +539,6 @@ private fun MesraTopAppBar(
                     )
                 }
 
-                // Direct Reset Memory Button
                 IconButton(
                     onClick = onQuickResetMemory,
                     modifier = Modifier.testTag("top_reset_memory_button")
@@ -549,7 +550,6 @@ private fun MesraTopAppBar(
                     )
                 }
 
-                // Clear Chat Button
                 IconButton(
                     onClick = onClearChat,
                     modifier = Modifier.testTag("clear_chat_button")
@@ -561,7 +561,6 @@ private fun MesraTopAppBar(
                     )
                 }
 
-                // Settings / Gemini API Key Button
                 IconButton(
                     onClick = onOpenSettings,
                     modifier = Modifier.testTag("settings_button")
@@ -696,7 +695,9 @@ private fun ChatBubbleItem(
 ) {
     val isUser = message.isFromUser
     val formattedTime = remember(message.timestamp) {
-        SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(message.timestamp))
+        runCatching {
+            SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(message.timestamp))
+        }.getOrDefault("")
     }
 
     Row(
@@ -924,7 +925,6 @@ private fun ChatBottomInputBar(
                     .testTag("chat_input_field")
             )
 
-            // Send Button
             IconButton(
                 onClick = onSendClick,
                 enabled = inputText.isNotBlank() && !isLoading,
@@ -947,7 +947,6 @@ private fun ChatBottomInputBar(
                 )
             }
 
-            // Floating Action Button for Voice Input
             FloatingActionButton(
                 onClick = onVoiceButtonClick,
                 shape = CircleShape,

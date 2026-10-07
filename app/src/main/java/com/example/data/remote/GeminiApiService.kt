@@ -111,8 +111,12 @@ object GeminiNetworkClient {
                 )
             } catch (e: HttpException) {
                 lastException = e
-                // If 404 (model not found on user's key) or 400, try next compatible model
-                if (e.code() == 404 || e.code() == 400) {
+                val statusCode = try {
+                    e.response()?.raw()?.code ?: -1
+                } catch (_: Exception) {
+                    -1
+                }
+                if (statusCode == 404 || statusCode == 400) {
                     continue
                 } else {
                     throw e

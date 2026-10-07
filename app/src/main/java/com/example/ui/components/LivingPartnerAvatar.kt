@@ -4,15 +4,14 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -64,13 +63,10 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.R
 import com.example.data.model.AvatarExpression
 import com.example.ui.theme.MesraBorderSubtle
 import com.example.ui.theme.MesraCardSurface
@@ -111,12 +107,9 @@ fun LivingPartnerAvatarHeader(
         while (true) {
             val waitTime = (2800L..4400L).random()
             delay(waitTime)
-            // Close eyelids
             blinkProgress = 1f
             delay(110L)
-            // Open eyelids
             blinkProgress = 0f
-            // 25% chance of quick double blink for lifelike realism
             if ((0..3).random() == 0) {
                 delay(140L)
                 blinkProgress = 1f
@@ -145,7 +138,6 @@ fun LivingPartnerAvatarHeader(
         label = "lipSyncMouth"
     )
 
-    // Infinite idle transitions: breathing, head tilt, hair sway, and floating heart particles
     val infiniteTransition = rememberInfiniteTransition(label = "avatarIdleMotion")
 
     val breathOffset by infiniteTransition.animateFloat(
@@ -212,6 +204,15 @@ fun LivingPartnerAvatarHeader(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF2B1035),
+                            MesraCardSurface,
+                            MesraDarkBg
+                        )
+                    )
+                )
                 .border(
                     width = 1.dp,
                     brush = Brush.linearGradient(
@@ -224,32 +225,6 @@ fun LivingPartnerAvatarHeader(
                     shape = RoundedCornerShape(26.dp)
                 )
         ) {
-            // Generated romantic night bokeh backdrop
-            Image(
-                painter = painterResource(id = R.drawable.img_ambient_backdrop_1791308557778),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .matchParentSize()
-                    .clip(RoundedCornerShape(26.dp)),
-                alpha = 0.32f
-            )
-
-            // Soft vignette overlay so the character pops
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                MesraDarkBg.copy(alpha = 0.35f),
-                                MesraCardSurface.copy(alpha = 0.72f),
-                                MesraDarkBg.copy(alpha = 0.92f)
-                            )
-                        )
-                    )
-            )
-
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -262,7 +237,6 @@ fun LivingPartnerAvatarHeader(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Status Badge
                     Surface(
                         color = MesraDarkBg.copy(alpha = 0.75f),
                         shape = RoundedCornerShape(50),
@@ -301,7 +275,6 @@ fun LivingPartnerAvatarHeader(
                         }
                     }
 
-                    // Voice Controls: Replay Last Answer + Mute/Unmute TTS
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -351,7 +324,7 @@ fun LivingPartnerAvatarHeader(
                 // Interactive Living Avatar Canvas
                 Box(
                     modifier = Modifier
-                        .size(164.dp)
+                        .size(160.dp)
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null
@@ -370,21 +343,22 @@ fun LivingPartnerAvatarHeader(
                     contentAlignment = Alignment.Center
                 ) {
                     Canvas(modifier = Modifier.fillMaxSize()) {
-                        drawLivingCompanionAvatar(
-                            expression = expression,
-                            isSpeaking = isSpeaking,
-                            blinkAmount = animatedBlink,
-                            mouthOpenness = animatedMouth,
-                            breathOffset = breathOffset,
-                            headTiltDegrees = headTiltDegrees,
-                            auraScale = auraPulse,
-                            particlePhase = particlePhase,
-                            moodColor = moodAccentColor,
-                            showExtraHearts = tapHeartBurst
-                        )
+                        if (size.width > 8f && size.height > 8f) {
+                            drawLivingCompanionAvatar(
+                                expression = expression,
+                                isSpeaking = isSpeaking,
+                                blinkAmount = animatedBlink,
+                                mouthOpenness = animatedMouth,
+                                breathOffset = breathOffset,
+                                headTiltDegrees = headTiltDegrees,
+                                auraScale = auraPulse,
+                                particlePhase = particlePhase,
+                                moodColor = moodAccentColor,
+                                showExtraHearts = tapHeartBurst
+                            )
+                        }
                     }
 
-                    // Speaking wave badge at bottom of avatar circle
                     if (isSpeaking) {
                         Surface(
                             color = MesraPinkPrimary,
@@ -417,7 +391,7 @@ fun LivingPartnerAvatarHeader(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // Interactive Expression Selector Bar (allows user to see & test all 5 required expressions anytime)
+                // Interactive Expression Selector Bar
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -472,9 +446,10 @@ private fun DrawScope.drawLivingCompanionAvatar(
 ) {
     val cx = size.width / 2f
     val cy = size.height / 2f
-    val baseRadius = size.minDimension * 0.42f
+    val baseRadius = (size.minDimension * 0.42f).coerceAtLeast(16f)
+    val safeAuraRadius = (baseRadius * 1.32f * auraScale.coerceAtLeast(0.5f)).coerceAtLeast(10f)
 
-    // 1. Pulsing Romantic Aura Glow (reacts to voice & mood)
+    // 1. Pulsing Romantic Aura Glow
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
@@ -483,22 +458,22 @@ private fun DrawScope.drawLivingCompanionAvatar(
                 Color.Transparent
             ),
             center = Offset(cx, cy),
-            radius = baseRadius * 1.32f * auraScale
+            radius = safeAuraRadius
         ),
-        radius = baseRadius * 1.32f * auraScale,
+        radius = safeAuraRadius,
         center = Offset(cx, cy)
     )
 
     if (isSpeaking) {
         drawCircle(
             color = MesraPinkPrimary.copy(alpha = 0.35f),
-            radius = baseRadius * 1.08f * auraScale,
+            radius = (baseRadius * 1.08f * auraScale.coerceAtLeast(0.5f)).coerceAtLeast(8f),
             center = Offset(cx, cy),
             style = Stroke(width = 2.5.dp.toPx())
         )
     }
 
-    // 2. Back Long Hair (moves gently with breathing)
+    // 2. Back Long Hair
     val hairBackColor = Color(0xFF28112B)
     val hairHighlightColor = Color(0xFF4D2153)
     val backHairPath = Path().apply {
@@ -518,7 +493,7 @@ private fun DrawScope.drawLivingCompanionAvatar(
     }
     drawPath(backHairPath, color = hairBackColor)
 
-    // 3. Neck & Shoulders (Idle breathing animation)
+    // 3. Neck & Shoulders
     val skinColor = Color(0xFFFFE5D9)
     val skinShadow = Color(0xFFF3C6B6)
     val neckWidth = baseRadius * 0.28f
@@ -529,7 +504,6 @@ private fun DrawScope.drawLivingCompanionAvatar(
         cornerRadius = CornerRadius(12f, 12f)
     )
 
-    // Romantic off-shoulder outfit in soft magenta-rose
     val shoulderPath = Path().apply {
         moveTo(cx - baseRadius * 0.72f, cy + baseRadius * 1.04f)
         quadraticTo(
@@ -568,7 +542,6 @@ private fun DrawScope.drawLivingCompanionAvatar(
         )
         translate(left = 0f, top = breathOffset * 0.85f)
     }) {
-        // Soft Face Contour
         val faceWidth = baseRadius * 1.24f
         val faceHeight = baseRadius * 1.34f
         drawOval(
@@ -577,7 +550,6 @@ private fun DrawScope.drawLivingCompanionAvatar(
             size = Size(faceWidth, faceHeight)
         )
 
-        // Rosy Cheek Blush (stronger when SHY, HAPPY, or SMILE)
         val blushAlpha = when (expression) {
             AvatarExpression.SHY -> 0.62f
             AvatarExpression.HAPPY -> 0.45f
@@ -587,27 +559,27 @@ private fun DrawScope.drawLivingCompanionAvatar(
         }
         val leftCheekCenter = Offset(cx - baseRadius * 0.34f, cy + baseRadius * 0.14f)
         val rightCheekCenter = Offset(cx + baseRadius * 0.34f, cy + baseRadius * 0.14f)
+        val cheekRadius = (baseRadius * 0.22f).coerceAtLeast(4f)
 
         drawCircle(
             brush = Brush.radialGradient(
-                colors = listOf( Color(0xFFFF6090).copy(alpha = blushAlpha), Color.Transparent ),
+                colors = listOf(Color(0xFFFF6090).copy(alpha = blushAlpha), Color.Transparent),
                 center = leftCheekCenter,
-                radius = baseRadius * 0.22f
+                radius = cheekRadius
             ),
-            radius = baseRadius * 0.22f,
+            radius = cheekRadius,
             center = leftCheekCenter
         )
         drawCircle(
             brush = Brush.radialGradient(
-                colors = listOf( Color(0xFFFF6090).copy(alpha = blushAlpha), Color.Transparent ),
+                colors = listOf(Color(0xFFFF6090).copy(alpha = blushAlpha), Color.Transparent),
                 center = rightCheekCenter,
-                radius = baseRadius * 0.22f
+                radius = cheekRadius
             ),
-            radius = baseRadius * 0.22f,
+            radius = cheekRadius,
             center = rightCheekCenter
         )
 
-        // Cute diagonal blush lines when SHY
         if (expression == AvatarExpression.SHY) {
             val slashColor = Color(0xFFFF4081).copy(alpha = 0.65f)
             for (i in -1..1) {
@@ -629,12 +601,12 @@ private fun DrawScope.drawLivingCompanionAvatar(
             }
         }
 
-        // 5. Eyes + Auto-Blinking + Expression Variations
+        // 5. Eyes
         val eyeY = cy - baseRadius * 0.04f
         val leftEyeX = cx - baseRadius * 0.27f
         val rightEyeX = cx + baseRadius * 0.27f
-        val eyeRadiusX = baseRadius * 0.13f
-        val eyeRadiusY = baseRadius * 0.15f
+        val eyeRadiusX = (baseRadius * 0.13f).coerceAtLeast(3f)
+        val eyeRadiusY = (baseRadius * 0.15f).coerceAtLeast(3f)
 
         drawCompanionEye(
             centerX = leftEyeX,
@@ -655,7 +627,7 @@ private fun DrawScope.drawLivingCompanionAvatar(
             isLeft = false
         )
 
-        // 6. Eyebrows (expressive per mood)
+        // 6. Eyebrows
         val browY = eyeY - eyeRadiusY * 1.45f
         val browColor = Color(0xFF3A163E)
         drawCompanionEyebrow(
@@ -675,7 +647,6 @@ private fun DrawScope.drawLivingCompanionAvatar(
             color = browColor
         )
 
-        // Subtle delicate nose highlight
         drawLine(
             color = skinShadow,
             start = Offset(cx, cy + baseRadius * 0.06f),
@@ -684,7 +655,7 @@ private fun DrawScope.drawLivingCompanionAvatar(
             cap = StrokeCap.Round
         )
 
-        // 7. Mouth + Real-time Lip Sync when AI is speaking
+        // 7. Mouth + Lip Sync
         val mouthY = cy + baseRadius * 0.29f
         drawCompanionMouth(
             centerX = cx,
@@ -695,7 +666,7 @@ private fun DrawScope.drawLivingCompanionAvatar(
             mouthOpenness = mouthOpenness
         )
 
-        // 8. Front Hair Bangs & Side Locks + Hair Ribbon Clip
+        // 8. Front Hair Bangs & Heart Clip
         val frontHairPath = Path().apply {
             moveTo(cx - faceWidth * 0.54f, cy - faceHeight * 0.05f)
             cubicTo(
@@ -703,7 +674,6 @@ private fun DrawScope.drawLivingCompanionAvatar(
                 cx + faceWidth * 0.52f, cy - faceHeight * 0.66f,
                 cx + faceWidth * 0.54f, cy - faceHeight * 0.05f
             )
-            // Soft bangs curves across forehead
             cubicTo(
                 cx + faceWidth * 0.32f, cy - faceHeight * 0.26f,
                 cx + faceWidth * 0.15f, cy - faceHeight * 0.12f,
@@ -723,15 +693,14 @@ private fun DrawScope.drawLivingCompanionAvatar(
             )
         )
 
-        // Cute pink heart hair-clip on the left side of her bangs
         drawMiniHeart(
             center = Offset(cx + baseRadius * 0.44f, cy - baseRadius * 0.36f),
-            size = baseRadius * 0.14f,
+            size = (baseRadius * 0.14f).coerceAtLeast(3f),
             color = MesraPinkPrimary
         )
     }
 
-    // 9. Floating Romantic Hearts & Sparkles around Mesra
+    // 9. Floating Romantic Hearts
     val showHearts = expression == AvatarExpression.HAPPY ||
         expression == AvatarExpression.SMILE ||
         expression == AvatarExpression.SHY ||
@@ -747,10 +716,10 @@ private fun DrawScope.drawLivingCompanionAvatar(
         )
         heartPositions.forEachIndexed { idx, (ox, oy, phaseShift) ->
             val bobY = sin(particlePhase + phaseShift) * 8.dp.toPx()
-            val pulse = 0.85f + 0.25f * cos(particlePhase + idx)
+            val pulse = (0.85f + 0.25f * cos(particlePhase + idx)).coerceAtLeast(0.4f)
             drawMiniHeart(
                 center = Offset(cx + baseRadius * ox, cy + baseRadius * oy + bobY),
-                size = baseRadius * 0.13f * pulse,
+                size = (baseRadius * 0.13f * pulse).coerceAtLeast(3f),
                 color = if (idx % 2 == 0) MesraPinkPrimary.copy(alpha = 0.82f)
                 else MesraSoftPink.copy(alpha = 0.75f)
             )
@@ -771,7 +740,6 @@ private fun DrawScope.drawCompanionEye(
     val effectiveClosure = if (isCurvedHappyEye) 0.88f else blinkAmount.coerceIn(0f, 1f)
 
     if (effectiveClosure > 0.78f) {
-        // Closed / Blinking or Happy curved eye arc
         val arcPath = Path().apply {
             val archSign = if (expression == AvatarExpression.HAPPY || expression == AvatarExpression.SMILE) -1f else 1f
             moveTo(centerX - radiusX, centerY)
@@ -791,58 +759,51 @@ private fun DrawScope.drawCompanionEye(
     }
 
     val openRatio = (1f - effectiveClosure).coerceIn(0.15f, 1f)
-    val currentHeight = radiusY * 2f * openRatio
+    val currentHeight = (radiusY * 2f * openRatio).coerceAtLeast(2f)
 
-    // Sclera (white of eye)
     drawOval(
         color = Color(0xFFFFFBFD),
         topLeft = Offset(centerX - radiusX, centerY - currentHeight / 2f),
         size = Size(radiusX * 2f, currentHeight)
     )
 
-    // Gaze shift when SHY
     val gazeShiftX = if (expression == AvatarExpression.SHY) radiusX * 0.22f else 0f
-
-    // Iris (rich magenta-violet gradient)
-    val irisRadius = radiusX * 0.76f
+    val irisRadius = (radiusX * 0.76f).coerceAtLeast(2f)
     val irisCenter = Offset(centerX + gazeShiftX, centerY)
+
     drawCircle(
         brush = Brush.verticalGradient(
             colors = listOf(Color(0xFF4A154B), Color(0xFFD81B60), Color(0xFFFF80AB))
         ),
-        radius = irisRadius * openRatio.coerceAtLeast(0.55f),
+        radius = (irisRadius * openRatio.coerceAtLeast(0.55f)).coerceAtLeast(1.5f),
         center = irisCenter
     )
 
-    // Pupil
     drawCircle(
         color = Color(0xFF1F0824),
-        radius = irisRadius * 0.42f * openRatio.coerceAtLeast(0.5f),
+        radius = (irisRadius * 0.42f * openRatio.coerceAtLeast(0.5f)).coerceAtLeast(1f),
         center = irisCenter
     )
 
-    // Specular Eye Highlights (extra sparkly when HAPPY or SAD)
     drawCircle(
         color = Color.White,
-        radius = irisRadius * 0.26f,
+        radius = (irisRadius * 0.26f).coerceAtLeast(1f),
         center = Offset(irisCenter.x - irisRadius * 0.28f, irisCenter.y - irisRadius * 0.28f)
     )
     drawCircle(
         color = Color.White.copy(alpha = 0.85f),
-        radius = irisRadius * 0.14f,
+        radius = (irisRadius * 0.14f).coerceAtLeast(0.8f),
         center = Offset(irisCenter.x + irisRadius * 0.28f, irisCenter.y + irisRadius * 0.22f)
     )
 
     if (expression == AvatarExpression.SAD) {
-        // Glistening tear droplet highlight at bottom of eye
         drawCircle(
             color = Color(0xFFB3E5FC).copy(alpha = 0.9f),
-            radius = irisRadius * 0.22f,
+            radius = (irisRadius * 0.22f).coerceAtLeast(1f),
             center = Offset(centerX + (if (isLeft) -1 else 1) * radiusX * 0.4f, centerY + currentHeight * 0.42f)
         )
     }
 
-    // Upper Eyelash Line
     val lashPath = Path().apply {
         moveTo(centerX - radiusX * 1.08f, centerY - currentHeight * 0.2f)
         quadraticTo(
@@ -912,8 +873,7 @@ private fun DrawScope.drawCompanionMouth(
     val tongueColor = Color(0xFFFF80AB)
 
     if (isSpeaking && mouthOpenness > 0.08f) {
-        // Lip-Sync Talking Mode: mouth opens & closes smoothly with vowel width modulation
-        val mouthW = baseRadius * (0.22f + 0.12f * (1f - mouthOpenness * 0.35f))
+        val mouthW = (baseRadius * (0.22f + 0.12f * (1f - mouthOpenness * 0.35f))).coerceAtLeast(4f)
         val mouthH = (baseRadius * 0.26f * mouthOpenness).coerceAtLeast(4.dp.toPx())
         val rect = Rect(
             left = centerX - mouthW / 2f,
@@ -922,7 +882,6 @@ private fun DrawScope.drawCompanionMouth(
             bottom = centerY + mouthH / 2f
         )
 
-        // Inner mouth cavity
         drawRoundRect(
             color = innerMouthColor,
             topLeft = rect.topLeft,
@@ -930,16 +889,14 @@ private fun DrawScope.drawCompanionMouth(
             cornerRadius = CornerRadius(mouthW / 2f, mouthH / 2f)
         )
 
-        // Cute tongue highlight at bottom of open mouth
         if (mouthOpenness > 0.28f) {
             drawOval(
                 color = tongueColor,
                 topLeft = Offset(centerX - mouthW * 0.32f, centerY + mouthH * 0.05f),
-                size = Size(mouthW * 0.64f, mouthH * 0.42f)
+                size = Size((mouthW * 0.64f).coerceAtLeast(2f), (mouthH * 0.42f).coerceAtLeast(2f))
             )
         }
 
-        // Lip outline
         drawRoundRect(
             color = lipColor,
             topLeft = rect.topLeft,
@@ -950,10 +907,8 @@ private fun DrawScope.drawCompanionMouth(
         return
     }
 
-    // Idle Mouth per Expression
     when (expression) {
         AvatarExpression.HAPPY -> {
-            // Cheerful open D-smile
             val w = baseRadius * 0.30f
             val h = baseRadius * 0.16f
             val path = Path().apply {
@@ -989,7 +944,6 @@ private fun DrawScope.drawCompanionMouth(
         }
 
         AvatarExpression.SHY -> {
-            // Cute wavy/shy small smile
             val w = baseRadius * 0.20f
             val path = Path().apply {
                 moveTo(centerX - w / 2f, centerY)
@@ -1004,7 +958,6 @@ private fun DrawScope.drawCompanionMouth(
         }
 
         AvatarExpression.SAD -> {
-            // Empathetic soft upturned pout
             val w = baseRadius * 0.22f
             val path = Path().apply {
                 moveTo(centerX - w / 2f, centerY + 4.dp.toPx())

@@ -2,6 +2,8 @@ package com.example.ui
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.data.local.ChatMessageEntity
 import com.example.data.local.MesraDatabase
@@ -15,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -22,11 +25,12 @@ import kotlinx.coroutines.launch
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private val database = MesraDatabase.getDatabase(application)
-    private val preferencesRepository = UserPreferencesRepository(application)
+    private val preferencesRepository = UserPreferencesRepository.getInstance(application)
     private val chatRepository = ChatRepository(database.chatDao(), preferencesRepository)
     private val ttsManager = TtsLipSyncManager(application)
 
     val messages: StateFlow<List<ChatMessageEntity>> = chatRepository.allMessagesFlow
+        .catch { emit(emptyList()) }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
@@ -34,6 +38,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         )
 
     val settings: StateFlow<AppSettingsState> = preferencesRepository.settingsFlow
+        .catch { emit(AppSettingsState()) }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
@@ -54,7 +59,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
-            chatRepository.ensureWelcomeMessageIfEmpty()
+            runCatching {
+                chatRepository.ensureWelcomeMessageIfEmpty()
+            }
         }
     }
 
@@ -67,20 +74,28 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             _isLoading.value = true
             ttsManager.stopSpeaking()
 
-            val currentSettings = preferencesRepository.settingsFlow.first()
-            val result = chatRepository.sendUserMessageAndGetReply(
-                userText = trimmed,
-                apiKey = currentSettings.effectiveApiKey,
-                selectedModel = currentSettings.selectedModel,
-                memoryState = currentSettings.memory
-            )
+            val currentSettings = runCatching {
+                preferencesRepository.settingsFlow.first()
+            }.getOrDefault(AppSettingsState())
+
+            val result = runCatching {
+                chatRepository.sendUserMessageAndGetReply(
+                    userText = trimmed,
+                    apiKey = currentSettings.effectiveApiKey,
+                    selectedModel = currentSettings.selectedModel,
+                    memoryState = currentSettings.memory
+                )
+            }.getOrElse {
+                SendMessageResult.FriendlyError(
+                    "Maaf ya sayang, ada kendala kecil waktu memproses pesanmu. Coba lagi sebentar ya 💕"
+                )
+            }
 
             _isLoading.value = false
 
             when (result) {
                 is SendMessageResult.Success -> {
                     _currentExpression.value = result.expression
-                    // Sequence: 1. Display reply -> 2. Avatar talking -> 3. TTS id-ID speaks -> 4. Lip-sync -> 5. Back to idle
                     ttsManager.speak(
                         rawText = result.message.text,
                         isVoiceEnabled = currentSettings.isTtsEnabled
@@ -107,7 +122,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             if (!next) {
                 ttsManager.stopSpeaking()
             } else {
-                // Speak latest AI message if user turns voice back on
                 val latestAiMsg = messages.value.lastOrNull { !it.isFromUser }?.text.orEmpty()
                 if (latestAiMsg.isNotBlank()) {
                     ttsManager.speak(latestAiMsg, isVoiceEnabled = true)
@@ -140,7 +154,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 ttsManager.stopSpeaking()
             }
             if (apiKey.isNotBlank()) {
-                _friendlyBannerMessage.value = "Yeay! Gemini API Key berhasil disimpan. Sekarang kita bisa ngobrol sepuasnya sayang 🥰"
+                _friendlyBannerMessage.value =
+                    "Yeay! Gemini API Key berhasil disimpan. Sekarang kita bisa ngobrol sepuasnya sayang 🥰"
                 _currentExpression.value = AvatarExpression.HAPPY
             }
         }
@@ -169,7 +184,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun clearChatHistory() {
         viewModelScope.launch {
             ttsManager.stopSpeaking()
-            chatRepository.clearAllChat()
+            runCatching { chatRepository.clearAllChat() }
             _currentExpression.value = AvatarExpression.SMILE
             _friendlyBannerMessage.value = null
         }
@@ -182,5 +197,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         super.onCleared()
         ttsManager.shutdown()
+    }
+
+    companion object {
+        fun provideFactory(application: Application): ViewModelProvider.Factory =
+            object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                    return ChatViewModel(application) as T
+                }
+            }
     }
 }
