@@ -265,8 +265,8 @@ fun LivingPartnerAvatarHeader(
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = when {
-                                    isSpeaking -> "Mesra sedang berbicara..."
-                                    isTyping -> "Mesra sedang mengetik..."
+                                    isSpeaking -> "MesraAI sedang berbicara..."
+                                    isTyping -> "MesraAI sedang mengetik..."
                                     else -> "${expression.emoji} ${expression.labelId}"
                                 },
                                 style = MaterialTheme.typography.labelSmall,

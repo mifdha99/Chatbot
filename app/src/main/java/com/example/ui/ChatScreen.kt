@@ -133,6 +133,7 @@ fun ChatScreen(
     val mouthOpenness by viewModel.mouthOpenness.collectAsStateWithLifecycle()
     val currentExpression by viewModel.currentExpression.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+    val streamingReplyText by viewModel.streamingReplyText.collectAsStateWithLifecycle()
     val bannerMessage by viewModel.friendlyBannerMessage.collectAsStateWithLifecycle()
 
     var inputText by remember { mutableStateOf("") }
@@ -250,7 +251,7 @@ fun ChatScreen(
 
     val listState = rememberLazyListState()
 
-    LaunchedEffect(messages.size, isLoading) {
+    LaunchedEffect(messages.size, isLoading, streamingReplyText) {
         val totalItems = messages.size + (if (isLoading) 1 else 0)
         if (totalItems > 0) {
             runCatching {
@@ -347,15 +348,21 @@ fun ChatScreen(
 
                 if (isLoading) {
                     item(key = "typing_indicator") {
-                        TypingIndicatorBubble()
+                        TypingIndicatorBubble(
+                            streamingText = streamingReplyText,
+                            expressionEmoji = currentExpression.emoji
+                        )
                     }
                 }
             }
 
             // 5. Quick Romantic Conversation Prompts
             QuickRomanticSuggestionsRow(
+                enabled = !isLoading,
                 onSuggestionClick = { suggestion ->
-                    viewModel.sendMessage(suggestion)
+                    if (!isLoading) {
+                        viewModel.sendMessage(suggestion)
+                    }
                 }
             )
 
@@ -367,7 +374,7 @@ fun ChatScreen(
                 isVoiceListening = isVoiceListening,
                 onSendClick = {
                     val toSend = inputText.trim()
-                    if (toSend.isNotEmpty()) {
+                    if (toSend.isNotEmpty() && !isLoading) {
                         inputText = ""
                         focusManager.clearFocus()
                         viewModel.sendMessage(toSend)
@@ -787,7 +794,10 @@ private fun ChatBubbleItem(
 }
 
 @Composable
-private fun TypingIndicatorBubble() {
+private fun TypingIndicatorBubble(
+    streamingText: String = "",
+    expressionEmoji: String = "🥰"
+) {
     val infiniteTransition = rememberInfiniteTransition(label = "typingPulse")
     val pulse by infiniteTransition.animateFloat(
         initialValue = 0.85f,
@@ -807,27 +817,46 @@ private fun TypingIndicatorBubble() {
     ) {
         Surface(
             color = AiBubbleBg,
-            shape = RoundedCornerShape(20.dp),
-            modifier = Modifier.border(1.dp, AiBubbleBorder, RoundedCornerShape(20.dp))
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 4.dp, bottomEnd = 20.dp),
+            modifier = Modifier
+                .widthIn(max = 310.dp)
+                .border(
+                    1.dp,
+                    AiBubbleBorder,
+                    RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 4.dp, bottomEnd = 20.dp)
+                )
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Favorite,
-                    contentDescription = null,
-                    tint = MesraPinkPrimary,
-                    modifier = Modifier
-                        .size(16.dp)
-                        .scale(pulse)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Mesra sedang mengetik balasan untukmu...",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MesraSoftPink
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Favorite,
+                        contentDescription = null,
+                        tint = MesraPinkPrimary,
+                        modifier = Modifier
+                            .size(16.dp)
+                            .scale(pulse)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "MesraAI sedang mengetik...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MesraSoftPink,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                if (streamingText.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = streamingText,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = TextPrimaryLight
+                    )
+                }
             }
         }
     }
@@ -835,6 +864,7 @@ private fun TypingIndicatorBubble() {
 
 @Composable
 private fun QuickRomanticSuggestionsRow(
+    enabled: Boolean = true,
     onSuggestionClick: (String) -> Unit
 ) {
     val suggestions = listOf(
@@ -858,13 +888,13 @@ private fun QuickRomanticSuggestionsRow(
                 shape = RoundedCornerShape(50),
                 modifier = Modifier
                     .clip(RoundedCornerShape(50))
-                    .clickable { onSuggestionClick(text) }
+                    .clickable(enabled = enabled) { onSuggestionClick(text) }
                     .border(1.dp, MesraBorderSubtle, RoundedCornerShape(50))
             ) {
                 Text(
                     text = text,
                     style = MaterialTheme.typography.labelSmall,
-                    color = TextSecondarySoft,
+                    color = if (enabled) TextSecondarySoft else TextMutedMauve,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                 )
             }
@@ -909,7 +939,11 @@ private fun ChatBottomInputBar(
                     imeAction = ImeAction.Send
                 ),
                 keyboardActions = KeyboardActions(
-                    onSend = { onSendClick() }
+                    onSend = {
+                        if (!isLoading && inputText.isNotBlank()) {
+                            onSendClick()
+                        }
+                    }
                 ),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MesraPinkPrimary,

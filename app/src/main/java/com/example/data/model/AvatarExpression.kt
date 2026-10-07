@@ -72,5 +72,27 @@ enum class AvatarExpression(
 
             return cleaned.ifEmpty { "Aku selalu di sini buat kamu, sayang." } to detectedExpression
         }
+
+        /**
+         * Safely parses partial streaming text from Gemini SSE chunks, stripping complete or
+         * in-progress leading bracket tags (e.g. "[SM" or "[SMILE]") so raw tags never flash in UI.
+         */
+        fun parseStreamingChunk(rawChunkText: String): Pair<String, AvatarExpression?> {
+            val trimmed = rawChunkText.trimStart()
+            if (trimmed.isEmpty()) return "" to null
+
+            // If the stream just started with '[' and hasn't closed ']' yet within first 12 chars, wait
+            if (trimmed.startsWith("[") && !trimmed.contains("]") && trimmed.length <= 12) {
+                return "" to null
+            }
+
+            val (cleaned, expression) = parseReplyAndExpression(trimmed)
+            val display = if (trimmed.isNotBlank() && cleaned == "Aku selalu di sini buat kamu, sayang." && !trimmed.contains("Aku selalu")) {
+                ""
+            } else {
+                cleaned
+            }
+            return display to expression
+        }
     }
 }

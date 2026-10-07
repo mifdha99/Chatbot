@@ -13,6 +13,7 @@ import com.example.data.preferences.UserPreferencesRepository
 import com.example.data.repository.ChatRepository
 import com.example.data.repository.SendMessageResult
 import com.example.voice.TtsLipSyncManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -28,6 +30,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val preferencesRepository = UserPreferencesRepository.getInstance(application)
     private val chatRepository = ChatRepository(database.chatDao(), preferencesRepository)
     private val ttsManager = TtsLipSyncManager(application)
+
+    private val isSendingLock = AtomicBoolean(false)
 
     val messages: StateFlow<List<ChatMessageEntity>> = chatRepository.allMessagesFlow
         .catch { emit(emptyList()) }
@@ -54,6 +58,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    private val _streamingReplyText = MutableStateFlow("")
+    val streamingReplyText: StateFlow<String> = _streamingReplyText.asStateFlow()
+
     private val _friendlyBannerMessage = MutableStateFlow<String?>(null)
     val friendlyBannerMessage: StateFlow<String?> = _friendlyBannerMessage.asStateFlow()
 
@@ -67,45 +74,59 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun sendMessage(userText: String) {
         val trimmed = userText.trim()
-        if (trimmed.isEmpty() || _isLoading.value) return
+        if (trimmed.isEmpty()) return
+
+        // Atomic double-submit guard before coroutine launch
+        if (!isSendingLock.compareAndSet(false, true)) return
+        _isLoading.value = true
+        _streamingReplyText.value = ""
+        _friendlyBannerMessage.value = null
 
         viewModelScope.launch {
-            _friendlyBannerMessage.value = null
-            _isLoading.value = true
-            ttsManager.stopSpeaking()
+            try {
+                ttsManager.stopSpeaking()
 
-            val currentSettings = runCatching {
-                preferencesRepository.settingsFlow.first()
-            }.getOrDefault(AppSettingsState())
+                val currentSettings = runCatching {
+                    preferencesRepository.settingsFlow.first()
+                }.getOrDefault(AppSettingsState())
 
-            val result = runCatching {
-                chatRepository.sendUserMessageAndGetReply(
-                    userText = trimmed,
-                    apiKey = currentSettings.effectiveApiKey,
-                    selectedModel = currentSettings.selectedModel,
-                    memoryState = currentSettings.memory
-                )
-            }.getOrElse {
-                SendMessageResult.FriendlyError(
-                    "Maaf ya sayang, ada kendala kecil waktu memproses pesanmu. Coba lagi sebentar ya 💕"
-                )
-            }
-
-            _isLoading.value = false
-
-            when (result) {
-                is SendMessageResult.Success -> {
-                    _currentExpression.value = result.expression
-                    ttsManager.speak(
-                        rawText = result.message.text,
-                        isVoiceEnabled = currentSettings.isTtsEnabled
+                val result = try {
+                    chatRepository.sendUserMessageAndGetReply(
+                        userText = trimmed,
+                        apiKey = currentSettings.effectiveApiKey,
+                        selectedModel = currentSettings.selectedModel,
+                        memoryState = currentSettings.memory,
+                        onPartialReply = { partialText, partialExpression ->
+                            _streamingReplyText.value = partialText
+                            _currentExpression.value = partialExpression
+                        }
+                    )
+                } catch (ce: CancellationException) {
+                    throw ce
+                } catch (_: Throwable) {
+                    SendMessageResult.FriendlyError(
+                        "Maaf ya sayang, ada kendala kecil waktu memproses pesanmu. Coba lagi sebentar ya 💕"
                     )
                 }
 
-                is SendMessageResult.FriendlyError -> {
-                    _currentExpression.value = AvatarExpression.SAD
-                    _friendlyBannerMessage.value = result.userFriendlyMessage
+                when (result) {
+                    is SendMessageResult.Success -> {
+                        _currentExpression.value = result.expression
+                        ttsManager.speak(
+                            rawText = result.message.text,
+                            isVoiceEnabled = currentSettings.isTtsEnabled
+                        )
+                    }
+
+                    is SendMessageResult.FriendlyError -> {
+                        _currentExpression.value = AvatarExpression.SAD
+                        _friendlyBannerMessage.value = result.userFriendlyMessage
+                    }
                 }
+            } finally {
+                _streamingReplyText.value = ""
+                _isLoading.value = false
+                isSendingLock.set(false)
             }
         }
     }

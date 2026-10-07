@@ -36,13 +36,39 @@ data class AppSettingsState(
     val memory: CompanionMemoryState = CompanionMemoryState()
 ) {
     val effectiveApiKey: String
-        get() = customApiKey.trim()
+        get() {
+            val userKey = customApiKey.trim()
+            if (userKey.isNotEmpty()) return userKey
+            return resolveBuildConfigApiKey()
+        }
 
     val isApiKeyConfigured: Boolean
         get() = effectiveApiKey.isNotEmpty()
 
     companion object {
         const val DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
+
+        private val cachedBuildConfigKey: String by lazy {
+            try {
+                val clazz = Class.forName("com.example.BuildConfig")
+                val field = clazz.getDeclaredField("GEMINI_API_KEY")
+                field.isAccessible = true
+                val raw = (field.get(null) as? String)?.trim().orEmpty()
+                if (raw.isNotEmpty() &&
+                    raw != "MY_GEMINI_API_KEY" &&
+                    raw != "null" &&
+                    !raw.startsWith("YOUR_")
+                ) {
+                    raw
+                } else {
+                    ""
+                }
+            } catch (_: Throwable) {
+                ""
+            }
+        }
+
+        fun resolveBuildConfigApiKey(): String = cachedBuildConfigKey
     }
 }
 
